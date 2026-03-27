@@ -9,7 +9,6 @@ backend/data/
 
 # Node
 node_modules/
-frontend/dist/
 .npm/
 
 # Env & secrets
