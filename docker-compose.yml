@@ -1,0 +1,52 @@
+version: "3.9"
+
+services:
+  # ─── BrainMap Backend ───────────────────────────────────────────────────────
+  brainstorm-backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: brainstorm-backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend/data:/app/data          # SQLite persistence
+      - ./frontend/dist:/app/frontend/dist # Served static frontend
+    environment:
+      - VLLM_BASE_URL=${VLLM_BASE_URL:-http://spark1:8000}
+      - VLLM_MODEL=${VLLM_MODEL:-Qwen/Qwen3.5-7B-Instruct}
+      - VLLM_API_KEY=${VLLM_API_KEY:-EMPTY}
+      - FUNASR_HOST=${FUNASR_HOST:-localhost}
+      - FUNASR_PORT=${FUNASR_PORT:-10095}
+      - FUNASR_MODE=${FUNASR_MODE:-2pass}
+    network_mode: host   # Use host network to reach FunASR & vLLM without extra config
+
+  # ─── FunASR Server (on SPARK2) ──────────────────────────────────────────────
+  funasr:
+    image: registry.cn-hangzhou.aliyuncs.com/modelscope-repo/funasr:latest
+    container_name: funasr-server
+    restart: unless-stopped
+    ports:
+      - "10095:10095"
+      - "10096:10096"
+    command: >
+      python -m funasr.runtime.python.http_server.funasr_server
+      --host 0.0.0.0
+      --port 10095
+      --asr_model paraformer-zh
+      --asr_model_online paraformer-zh-streaming
+      --vad_model fsmn-vad
+      --punc_model ct-punc
+      --lm_model none
+    volumes:
+      - funasr_models:/root/.cache/modelscope   # Cache downloaded models
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia  # Remove if no GPU
+              capabilities: [gpu]
+
+volumes:
+  funasr_models:
